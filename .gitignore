@@ -4,6 +4,9 @@
 
 # User-specific stuff
 .idea/
+build
+*.c
+*.pyd
 
 # CMake
 cmake-build-*/

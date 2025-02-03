@@ -2,7 +2,7 @@ import json
 import multiprocessing
 import os
 from generator import generate_map, are_grids_same
-from solver import solve
+from solver_cy import solve
 
 
 def target_map_count(n):

@@ -1,116 +1,74 @@
-# --- Cache Section ---
-_positions_cache = {}  # Global cache to store generated queen positions for each board size
+# solver.py
 
-
-def generate_positions(n):
+def count_valid_solutions(color_grid, threshold):
     """
-    Generate all permutations of numbers from 0 to n-1 representing queen placements,
-    with the constraint that the difference between consecutive columns is greater than 1.
-    This ensures that queens in adjacent rows are not placed in adjacent columns (avoiding near-diagonal conflicts).
+    直接使用回溯（backtracking）和位运算统计给定色块分割（color_grid）下
+    符合条件的皇后排列数量（满足：
+         1. 每行和每列只有一个皇后；
+         2. 相邻行的皇后不在相邻列（即绝对差大于 1）；
+         3. 每个色块内最多只有一个皇后）。
+    如果计数超过 threshold，则提前返回（即剪枝）。
 
-    Uses a global cache (_positions_cache) to avoid recomputation for the same n.
-
-    Parameters:
-        n (int): The size of the board (and number of queens).
+    Args:
+        color_grid (list of list): 用于指示区域（色块）的网格，元素可转换为字符串。
+        threshold (int): 当解的数量超过该值时提前剪枝返回。
 
     Returns:
-        List[List[int]]: A list of valid queen positions where each inner list represents a permutation.
+        int: 符合条件的排列数量（可能超过 threshold）。
     """
-    if n in _positions_cache:
-        return _positions_cache[n]
+    n = len(color_grid)
+    # 先将所有色块 id 转为字符串，方便比较
+    grid = [[str(cell) for cell in row] for row in color_grid]
 
-    positions = []
-    used = [False] * n  # Track whether a column is already used in the current permutation
+    def backtrack(row, used_cols, last_col, used_blocks):
+        if row == n:
+            return 1  # 找到一个完整解
+        count = 0
+        # 枚举当前行中所有可能的列（0 到 n-1）
+        for col in range(n):
+            # 判断列是否已使用（用位掩码判断）
+            if used_cols & (1 << col):
+                continue
+            # 对于相邻行的约束：如果不是第一行，则当前列不能与上一行皇后相邻
+            if row > 0 and abs(last_col - col) <= 1:
+                continue
+            block_id = grid[row][col]
+            # 同一区块内只能出现一个皇后
+            if block_id in used_blocks:
+                continue
+            # 标记当前选择，并进入下一行
+            new_used_cols = used_cols | (1 << col)
+            new_used_blocks = used_blocks | {block_id}
+            cnt = backtrack(row + 1, new_used_cols, col, new_used_blocks)
+            count += cnt
+            if count > threshold:
+                # 提前剪枝：一旦解数超过阈值，直接返回
+                return count
+        return count
 
-    def backtrack(position):
-        """
-        Recursively build valid queen positions using backtracking.
-
-        Parameters:
-            position (List[int]): The current partial permutation of queen placements.
-        """
-        # If a full permutation is found, add a copy to positions
-        if len(position) == n:
-            positions.append(position[:])
-            return
-
-        # Try each column for the next row
-        for i in range(n):
-            # Check if column 'i' is unused and if placing a queen here does not violate the constraint
-            if not used[i] and (not position or abs(position[-1] - i) > 1):
-                used[i] = True  # Mark column as used
-                position.append(i)
-                backtrack(position)  # Continue to the next row
-                position.pop()  # Backtrack: remove the queen placement
-                used[i] = False  # Reset the column usage
-
-    backtrack([])
-    _positions_cache[n] = positions  # Cache the result for future calls
-    return positions
+    return backtrack(0, 0, None, set())
 
 
-def check_solution(positions, color_grid):
+def solve(color_grid, name, threshold=1):
     """
-    Quickly verify that a given queen placement satisfies the color block constraint.
+    评估给定地图（以 color_grid 表示）的解数，并判断是否满足难度要求。
+    与原来不同的是，这里不生成所有排列，而是直接统计符合条件的解，
+    并在达到阈值时提前返回以节省时间。
 
-    The board is divided into color blocks (provided by color_grid). This function checks that
-    no two queens reside in the same color block. The positions already ensure that queens do not conflict
-    by rows, columns, or immediate diagonals.
-
-    Parameters:
-        positions (List[int]): A permutation representing the queen positions (index as row, value as column).
-        color_grid (List[List[int]]): A 2D grid representing the color blocks of the board.
+    Args:
+        color_grid (list of list): 色块分割网格
+        name (str): 地图的名字
+        threshold (int): 解的数量阈值，超过此值就认为“难度不够”
 
     Returns:
-        bool: True if the solution satisfies the constraint, False otherwise.
+        dict: 包含解数、是否可解等信息的结果字典，格式与原来类似。
     """
-    seen_blocks = set()  # Keep track of visited color blocks
-    for i, col in enumerate(positions):
-        # Convert block id to string for consistency with other parts of the system
-        block_id = str(color_grid[i][col])
-        if block_id in seen_blocks:
-            return False  # Constraint violated: more than one queen in the same block
-        seen_blocks.add(block_id)
-    return True
-
-
-def solve(queen_map, name, threshold=1):
-    """
-    Solve the chessboard puzzle given a board with color block constraints.
-
-    The method performs the following steps:
-      1. Generate all valid queen positions (permutations) that satisfy the near-diagonal constraint.
-      2. For each generated position, check if it also meets the color block constraint.
-      3. Count solutions, and if the count exceeds a predefined threshold, stop early (pruning).
-
-    Parameters:
-        queen_map (List[List[int]]): The board represented as a color grid (color blocks).
-        name (str): An identifier for the puzzle.
-        threshold (int, optional): The maximum number of solutions to search for before early termination.
-                                   Defaults to 1.
-
-    Returns:
-        dict: A dictionary containing:
-            - "name": The identifier provided.
-            - "solvable": A boolean indicating if at least one solution exists.
-            - "number_solution": The number of valid solutions found (up to threshold + 1).
-            - "number_possibility": The total number of generated queen positions.
-    """
-    grid = queen_map  # The color grid representing the board
-    all_positions = generate_positions(len(grid))  # Generate positions for an n x n board
-
-    solution_count = 0  # Count of valid solutions
-    for pos in all_positions:
-        if check_solution(pos, grid):
-            solution_count += 1
-            if solution_count > threshold:
-                # Early termination if the solution count exceeds the threshold
-                break
-
+    count = count_valid_solutions(color_grid, threshold)
     result = {
         "name": name,
-        "solvable": solution_count > 0,
-        "number_solution": solution_count,
-        "number_possibility": len(all_positions)
+        "solvable": count > 0,
+        "number_solution": count,
+        # 因为我们没有生成所有排列，故“number_possibility”字段不再计算（也可以置为 None）
+        "number_possibility": None
     }
     return result

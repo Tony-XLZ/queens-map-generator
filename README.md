@@ -1,76 +1,91 @@
-# N-Queens Region-Based Map Generator and Solver
+# Queens Map Generation
+
+Welcome to the **Queens Map Generation** project! This project generates challenging chessboard puzzles based on the n-Queens problem combined with region (color block) constraints. It utilizes advanced Python techniques along with Cython acceleration to efficiently evaluate puzzle difficulty—even for larger board sizes (n > 11).
 
 ## Overview
-This project implements a powerful **N-Queens-based region map generator and solver** using **randomized backtracking, region segmentation, and multi-source flood fill**. It efficiently generates maps where the placement of queens determines distinct regions, and evaluates their solvability based on strict constraints. 
 
-By leveraging **parallel processing**, this system rapidly generates unique maps across different board sizes while ensuring diversity in region layouts. The maps are stored in JSON format, allowing easy reuse and analysis.
+The traditional n-Queens problem asks for placements of n queens on an n×n chessboard so that no two queens attack each other. In our extended version, additional constraints are introduced:
 
-## Features
-- **Randomized N-Queens Placement**: Generates valid N-Queens solutions while enforcing column and diagonal constraints.
-- **Region Segmentation**: Uses an **adaptive flood-fill algorithm** to create distinct regions based on queen placements.
-- **Parallelized Map Generation**: Utilizes **multiprocessing** to generate and validate maps efficiently.
-- **Solvability Evaluation**: Each generated map is assessed for its uniqueness and difficulty using a **constraint solver**.
-- **Duplicate Detection**: Ensures no two maps share the same region segmentation structure.
-- **Configurable Board Sizes**: Supports board sizes from **4×4 to 17×17**, with flexible generation targets.
+1. **Non-Adjacent Queens Constraint:** In consecutive rows, queens must not be placed in adjacent columns.
+2. **Region (Color Block) Constraint:** The chessboard is divided into colored regions, and each region may contain at most one queen.
 
-## Implementation Details
-### 1. N-Queens Randomized Backtracking
-- A **randomized backtracking algorithm** places queens on an N×N chessboard.
-- The solution ensures that **no two queens share the same row, column, or diagonal**.
-- The generated queen positions serve as the foundation for defining **color regions** on the board.
+Because the number of valid queen placements grows combinatorially with n, especially when considering extra constraints, our project adopts a two-pronged approach for performance:
+- **Python-Level Optimizations:** Using recursion with early-pruning and bit-level operations.
+- **Cython Acceleration:** Rewriting the core backtracking solver in Cython (with released GIL and memory views) to achieve C-level speed.
 
-### 2. Region-Based Grid Segmentation
-- The board is divided into distinct **color regions**, with each region expanding outward from queen positions.
-- A **randomly chosen special region** expands fully, while other regions expand probabilistically (0.3–0.5 probability per step).
-- A **multi-source flood-fill algorithm** propagates regions efficiently while maintaining randomness.
-- Any unassigned cells are post-processed to ensure complete coverage.
+## Project Structure
 
-### 3. Map Validation & Filtering
-- Each generated map is evaluated using a **solver** that determines if it has at most **one valid queen placement solution**.
-- Maps exceeding the threshold are discarded to maintain a balance of challenge and uniqueness.
-- The generated maps are checked for duplicates by comparing region layouts.
+- **`main.py`**  
+  The entry point of the application. It coordinates map generation, uniqueness checks, and calls the solver to evaluate each map's difficulty.
 
-### 4. Parallelized Generation & Storage
-- The system runs **multiple worker processes** to speed up map generation.
-- Maps are saved in a **structured JSON file** (`generated_maps/maps.json`).
-- Each map is uniquely named and labeled according to its board size.
+- **`generator.py`**  
+  Contains functions to generate random n-Queens solutions and to partition the board into regions (color grids). The region generation uses a multi-source flood fill strategy with randomized probabilities.
+
+- **`solver.py`**  
+  The pure-Python solver implementation that evaluates board configurations by enumerating valid queen placements under the imposed constraints.
+
+- **`solver_cy.pyx`**  
+  A Cython implementation of the core recursive solver. This module uses static typing, memory views, and GIL-free recursion to greatly improve performance for larger board sizes.
+
+- **`setup.py`**  
+  The build script for compiling the Cython module. It uses `cythonize` along with NumPy’s header files to correctly compile the extension module.
+
+## Requirements
+
+- **Python 3.x** (tested with Python 3.13)
+- **NumPy**
+- **Cython**
+- A C/C++ compiler (compatible with your platform)
+
+Install the Python dependencies with pip:
+
+```bash
+pip install numpy cython
+```
+
+## Building the Cython Module
+
+Before running `main.py`, you need to build the Cython extension:
+
+```bash
+python setup.py build_ext --inplace
+```
+
+This command compiles `solver_cy.pyx` into a binary extension module (e.g., `solver_cy.so` on Linux/macOS or `solver_cy.pyd` on Windows) that is automatically imported by `main.py`.
 
 ## Usage
-### Running the Map Generator
-To generate maps for board sizes 4 to 17, run:
+
+After building the Cython module, you can run the main script:
+
 ```bash
-python generate_maps.py
+python main.py
 ```
-This will:
-- Generate and store new maps if the required number is not met.
-- Skip redundant calculations by loading previously saved maps.
-- Utilize **all available CPU cores** to parallelize the generation process.
 
-### JSON Output Format
-Each generated map follows this structure:
-```json
-{
-    "name": "Map n8 #12",
-    "caseNumber": 8,
-    "colorGrid": [[1, 1, 2, ...], [3, 4, 2, ...], ...],
-    "queenBoard": [[".", ".", "Q", ...], [".", "Q", ".", ...], ...]
-}
-```
-- `name`: Unique identifier for the map.
-- `caseNumber`: Board size (N×N).
-- `colorGrid`: 2D array representing region assignments.
-- `queenBoard`: Human-readable chessboard representation.
+`main.py` will generate maps for chessboard sizes ranging from **4 to 17**. Each generated map includes:
 
-### Checking Map Uniqueness
-To verify whether two generated maps share identical region structures, use:
-```python
-from generator import are_grids_same
-same = are_grids_same(grid1, grid2)
-```
-This will return `True` if the maps are structurally identical and `False` otherwise.
+- A **color grid** (region segmentation)
+- A **visual chessboard** with queen placements
+- An **evaluation report** that checks if the puzzle has a unique solution (or meets the difficulty threshold)
 
-## Performance Optimization
-- **Batch Processing**: Generates maps in **batches of at least twice the required amount** to increase valid outputs.
-- **Early Termination (Pruning)**: Stops searching once the required number of valid maps is found.
-- **Cached Computation**: Stores previous queen placements to avoid redundant calculations.
-- **Parallel Processing**: Runs multiple instances of the generator across CPU cores.
+The generated maps are stored in a JSON file (`generated_maps/maps.json`).
+
+## Scientific & Technical Insights
+
+### Optimization Philosophy:
+Rather than enumerating all possible valid configurations in pure Python, we directly count valid solutions using **bitwise operations and recursive backtracking**. Once the count exceeds a set threshold, the recursion prunes further search, saving computational time.
+
+### Cython Acceleration:
+The Cython module leverages:
+
+- **Static Type Declarations:** Allowing the C compiler to optimize arithmetic and logical operations.
+- **Memory Views:** To efficiently access NumPy arrays in a GIL-free context.
+- **GIL Release:** Permitting the heavy recursive computation to run at near C-speed.
+
+### Scalability:
+These improvements are critical for handling **board sizes greater than 10**, where the search space can become enormous. Our design ensures that even with the combinatorial explosion, only the necessary computations are performed.
+
+## Future Enhancements
+
+- Support for **custom region growth rules**.
+- **Visualization tools** for generated maps.
+- **Integration with deep learning models** for automated difficulty tuning.
