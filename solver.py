@@ -1,159 +1,116 @@
+# --- Cache Section ---
+_positions_cache = {}  # Global cache to store generated queen positions for each board size
+
+
 def generate_positions(n):
     """
-    Generates all valid permutations of positions (0 to n-1) for placing queens,
-    with the additional constraint that consecutive positions (in the permutation)
-    must not be adjacent (i.e., the absolute difference > 1).
+    Generate all permutations of numbers from 0 to n-1 representing queen placements,
+    with the constraint that the difference between consecutive columns is greater than 1.
+    This ensures that queens in adjacent rows are not placed in adjacent columns (avoiding near-diagonal conflicts).
 
-    Args:
-        n (int): The size of the board (and the number of queens).
+    Uses a global cache (_positions_cache) to avoid recomputation for the same n.
+
+    Parameters:
+        n (int): The size of the board (and number of queens).
 
     Returns:
-        list of list of int: A list containing all valid permutations.
+        List[List[int]]: A list of valid queen positions where each inner list represents a permutation.
     """
+    if n in _positions_cache:
+        return _positions_cache[n]
 
-    def backtrack(position, used):
-        # When a complete permutation is constructed, add a copy to the positions list.
+    positions = []
+    used = [False] * n  # Track whether a column is already used in the current permutation
+
+    def backtrack(position):
+        """
+        Recursively build valid queen positions using backtracking.
+
+        Parameters:
+            position (List[int]): The current partial permutation of queen placements.
+        """
+        # If a full permutation is found, add a copy to positions
         if len(position) == n:
             positions.append(position[:])
             return
-        for i in range(n):
-            # Check if number i is not used and that it does not violate the non-adjacency rule.
-            if not used[i] and (len(position) < 1 or abs(position[-1] - i) > 1):
-                position.append(i)
-                used[i] = True
-                backtrack(position, used)
-                # Backtrack: remove the last placed number and mark it as unused.
-                position.pop()
-                used[i] = False
 
-    positions = []
-    backtrack([], [False] * n)
+        # Try each column for the next row
+        for i in range(n):
+            # Check if column 'i' is unused and if placing a queen here does not violate the constraint
+            if not used[i] and (not position or abs(position[-1] - i) > 1):
+                used[i] = True  # Mark column as used
+                position.append(i)
+                backtrack(position)  # Continue to the next row
+                position.pop()  # Backtrack: remove the queen placement
+                used[i] = False  # Reset the column usage
+
+    backtrack([])
+    _positions_cache[n] = positions  # Cache the result for future calls
     return positions
 
 
-def fill_blocks(color_grid):
+def check_solution(positions, color_grid):
     """
-    Groups grid coordinates by their block (or color) values.
+    Quickly verify that a given queen placement satisfies the color block constraint.
 
-    This function builds a dictionary where each key is a color (converted to string)
-    and the corresponding value is a list of coordinates (as [row, col]) that share that color.
+    The board is divided into color blocks (provided by color_grid). This function checks that
+    no two queens reside in the same color block. The positions already ensure that queens do not conflict
+    by rows, columns, or immediate diagonals.
 
-    Args:
-        color_grid (list of list): A 2D list representing the board with color identifiers.
+    Parameters:
+        positions (List[int]): A permutation representing the queen positions (index as row, value as column).
+        color_grid (List[List[int]]): A 2D grid representing the color blocks of the board.
 
     Returns:
-        dict: A dictionary mapping each color to a list of coordinate pairs.
+        bool: True if the solution satisfies the constraint, False otherwise.
     """
-    blocks = {}
-    for i in range(len(color_grid)):
-        for j in range(len(color_grid[i])):
-            color = str(color_grid[i][j])
-            if color in blocks:
-                blocks[color].append([i, j])
-            else:
-                blocks[color] = [[i, j]]
-    return blocks
-
-
-def check_win(game_state, blocks):
-    """
-    Checks if the current game state is a winning solution.
-
-    The function verifies:
-      1. Each row and each column contains exactly one queen.
-      2. No two queens share a diagonal adjacent (both primary and secondary) cell.
-      3. Within any block (or color group), at most one queen is placed.
-
-    Args:
-        game_state (list of list of int): A 2D board state with 1 representing a queen and 0 empty.
-        blocks (dict): A dictionary mapping block identifiers to lists of their coordinates.
-
-    Returns:
-        bool: True if the game state satisfies all winning conditions, False otherwise.
-    """
-    board_size = len(game_state)
-
-    # Check that every row and every column has exactly one queen.
-    for i in range(board_size):
-        sum_row = sum(game_state[i])
-        if sum_row != 1:
-            return False
-
-        sum_col = sum(game_state[j][i] for j in range(board_size))
-        if sum_col != 1:
-            return False
-
-    # Check that no queen is diagonally adjacent to another queen.
-    # This check only applies to positions that have all four diagonal neighbors.
-    for i in range(1, board_size - 1):
-        for j in range(1, board_size - 1):
-            if game_state[i][j] == 1:
-                if game_state[i - 1][j - 1] == 1:
-                    return False
-                if game_state[i - 1][j + 1] == 1:
-                    return False
-                if game_state[i + 1][j - 1] == 1:
-                    return False
-                if game_state[i + 1][j + 1] == 1:
-                    return False
-
-    # Check that in each block, there is at most one queen.
-    for key in blocks:
-        sum_block = 0
-        for coord in blocks[key]:
-            sum_block += game_state[coord[0]][coord[1]]
-        if sum_block > 1:
-            return False
-
+    seen_blocks = set()  # Keep track of visited color blocks
+    for i, col in enumerate(positions):
+        # Convert block id to string for consistency with other parts of the system
+        block_id = str(color_grid[i][col])
+        if block_id in seen_blocks:
+            return False  # Constraint violated: more than one queen in the same block
+        seen_blocks.add(block_id)
     return True
 
 
-def solve(queen_map, name):
+def solve(queen_map, name, threshold=1):
     """
-    Determines the solvability and number of winning configurations for a given queen_map.
+    Solve the chessboard puzzle given a board with color block constraints.
 
-    The function:
-      1. Constructs the blocks (or color groups) based on the input grid.
-      2. Generates all valid positions using generate_positions.
-      3. For each permutation, it builds a game state with queens placed accordingly.
-      4. Validates the game state with check_win.
+    The method performs the following steps:
+      1. Generate all valid queen positions (permutations) that satisfy the near-diagonal constraint.
+      2. For each generated position, check if it also meets the color block constraint.
+      3. Count solutions, and if the count exceeds a predefined threshold, stop early (pruning).
 
-    Args:
-        queen_map (list of list): A 2D grid representing the board with colors/blocks.
-        name (str): An identifier for the current puzzle instance.
+    Parameters:
+        queen_map (List[List[int]]): The board represented as a color grid (color blocks).
+        name (str): An identifier for the puzzle.
+        threshold (int, optional): The maximum number of solutions to search for before early termination.
+                                   Defaults to 1.
 
     Returns:
         dict: A dictionary containing:
-            - "name": the given puzzle name,
-            - "solvable": True if at least one winning configuration is found,
-            - "number_solution": count of winning configurations,
-            - "number_possibility": total number of valid position permutations considered.
+            - "name": The identifier provided.
+            - "solvable": A boolean indicating if at least one solution exists.
+            - "number_solution": The number of valid solutions found (up to threshold + 1).
+            - "number_possibility": The total number of generated queen positions.
     """
-    grid = queen_map
-    # Group cells into blocks based on their color.
-    blocks = fill_blocks(grid)
-    # Generate all possible non-adjacent queen positions (as permutations) for the board size.
-    all_pos = generate_positions(len(grid))
+    grid = queen_map  # The color grid representing the board
+    all_positions = generate_positions(len(grid))  # Generate positions for an n x n board
+
+    solution_count = 0  # Count of valid solutions
+    for pos in all_positions:
+        if check_solution(pos, grid):
+            solution_count += 1
+            if solution_count > threshold:
+                # Early termination if the solution count exceeds the threshold
+                break
 
     result = {
         "name": name,
-        "solvable": False,
-        "number_solution": 0,
-        "number_possibility": len(all_pos)
+        "solvable": solution_count > 0,
+        "number_solution": solution_count,
+        "number_possibility": len(all_positions)
     }
-
-    # Iterate over every valid permutation of queen positions.
-    for positions in all_pos:
-        # Initialize an empty game state board.
-        game_state = [[0] * len(grid) for _ in range(len(grid))]
-
-        # Place queens according to the current permutation.
-        for row, col in enumerate(positions):
-            game_state[row][col] = 1
-
-        # If the configuration is winning, update the result.
-        if check_win(game_state, blocks):
-            result['solvable'] = True
-            result['number_solution'] += 1
-
     return result

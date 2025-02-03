@@ -7,20 +7,19 @@ from solver import solve
 
 def target_map_count(n):
     """
-    Determine the target number of maps to generate based on the board size.
+    Determine the target number of maps to generate based on board size n.
 
-    For different board sizes, the required number of maps is:
-      - n in [4, 5]: 30 maps
-      - n in [6, 7]: 50 maps
-      - n in [8, 13]: 70 maps
-      - n in [14, 17]: 100 maps
-      - Otherwise: 0 maps
+    The mapping is as follows:
+      - For n = 4 or 5: 30 maps.
+      - For n = 6 or 7: 50 maps.
+      - For n in [8, 13]: 70 maps.
+      - For n in [14, 17]: 100 maps.
 
-    Args:
-        n (int): The side length of the chessboard.
+    Parameters:
+        n (int): The size of the chessboard.
 
     Returns:
-        int: The target count of maps to generate for board size n.
+        int: The target number of maps for the given board size.
     """
     if n in [4, 5]:
         return 30
@@ -36,25 +35,25 @@ def target_map_count(n):
 
 def worker_generate_map(n):
     """
-    Generate a map with board size n and evaluate its difficulty using the solver.
+    Generate a single n×n map and evaluate it using the solver.
 
-    This worker function performs the following:
-      1. Generates a map for a chessboard of size n using a random n-Queens solution.
-      2. Uses the solver to evaluate the map (by checking the number of solutions).
-      3. Returns the map only if the number of solutions does not exceed the threshold (set to 1).
-         Otherwise, returns None.
+    This function generates a map using the n-Queens based generator and then
+    checks its solvability via the solver. Only maps with a number of solutions
+    not exceeding a preset threshold (here, threshold=1) are accepted.
 
-    Args:
-        n (int): The board size.
+    Parameters:
+        n (int): The size of the board (n×n).
 
     Returns:
-        dict or None: The generated map dictionary if it meets the threshold criteria;
+        dict or None: The generated map if it satisfies the threshold condition;
                       otherwise, None.
     """
+    # Generate a new map based on an n-Queens solution and region segmentation.
     new_map = generate_map(n)
     threshold = 1
-    solution = solve(new_map["colorGrid"], new_map["name"])
-    # Only return maps with solution count at or below the threshold.
+    # Evaluate the generated map with the solver.
+    solution = solve(new_map["colorGrid"], new_map["name"], threshold=threshold)
+    # Accept maps with at most 'threshold' solutions.
     if solution["number_solution"] <= threshold:
         return new_map
     else:
@@ -62,72 +61,66 @@ def worker_generate_map(n):
 
 
 if __name__ == '__main__':
-    # Create the output directory and define the JSON file path.
+    # Create the output directory if it doesn't exist.
     output_dir = "generated_maps"
     os.makedirs(output_dir, exist_ok=True)
     file_name = os.path.join(output_dir, "maps.json")
 
-    # Attempt to load existing map data from the JSON file.
-    # The format is a dictionary with board sizes as keys (e.g., "4", "5", etc.)
-    # and a list of corresponding maps as values.
+    # Attempt to load existing map data from file.
     try:
         with open(file_name, "r", encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         data = {}
 
-    # Ensure each board size from 4 to 17 has an associated list in the data.
+    # Ensure that each board size (from 4 to 17) has its own list for storing maps.
     for n in range(4, 18):
         key = str(n)
         if key not in data:
             data[key] = []
 
-    # Create a pool of worker processes equal to the number of CPU cores.
+    # Create a multiprocessing pool with a number of processes equal to the CPU count.
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
     try:
-        # For each board size from 4 to 17, generate the required number of maps.
+        # Process board sizes from 4 to 17.
         for n in range(4, 18):
             key = str(n)
             target = target_map_count(n)
             current_maps = data[key]
             needed = target - len(current_maps)
-            print(f"Board size {n}: Need to generate {needed} new map(s) (target {target} maps).")
-            # Increase the batch size to improve the probability of obtaining maps that meet the criteria.
+            print(f"Board size {n}: Need {needed} more maps (target {target}).")
+            # Increase the batch size to improve the likelihood of generating valid maps.
             batch_size = max(needed * 2, 10)
 
             while needed > 0:
-                # Use multiprocessing to generate a batch of maps for the current board size.
+                # Generate a batch of maps concurrently.
                 results = pool.map(worker_generate_map, [n] * batch_size)
                 for new_map in results:
+                    # Skip if no valid map was generated.
                     if new_map is None:
                         continue
-
-                    # Uniqueness check: ensure the new map's color grid is not identical to any existing map.
+                    # Check if the new map's region segmentation is unique compared to existing maps.
                     is_unique = True
                     for existing in current_maps:
                         if are_grids_same(new_map["colorGrid"], existing["colorGrid"]):
                             is_unique = False
-                            # Duplicate map; skip adding.
                             break
                     if is_unique:
+                        # Assign a unique name and update the map list.
                         new_map["name"] = f"Map n{n} #{len(current_maps) + 1}"
                         current_maps.append(new_map)
                         needed -= 1
                         print(f"Board size {n}: Generated {new_map['name']} (total now {len(current_maps)}).")
                         if needed <= 0:
                             break
-            print(f"Board size {n} complete, with a total of {len(current_maps)} maps.")
+            print(f"Board size {n} completed, generated {len(current_maps)} maps.")
 
         # Save all generated maps to the JSON file.
-        # The saved JSON includes:
-        #    - "name": the map name,
-        #    - "caseNumber": the board size,
-        #    - "colorGrid": the region segmentation grid,
-        #    - "queenBoard": the chessboard with the queen solution.
         with open(file_name, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
         print("All maps have been generated and saved!")
     finally:
+        # Properly close and join the multiprocessing pool.
         pool.close()
         pool.join()

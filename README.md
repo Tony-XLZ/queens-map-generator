@@ -1,160 +1,90 @@
-# Queens Map Generator
+# N-Queens Region-Based Map Generator and Solver
 
 ## Overview
-This project is a sophisticated puzzle map generator that creates unique, colorful chessboard maps based on randomized n-Queens solutions. It leverages advanced algorithms to produce puzzles of various sizes (from 4×4 up to 17×17) while ensuring both challenge and uniqueness. Each generated map includes:
+This project implements a powerful **N-Queens-based region map generator and solver** using **randomized backtracking, region segmentation, and multi-source flood fill**. It efficiently generates maps where the placement of queens determines distinct regions, and evaluates their solvability based on strict constraints. 
 
-- **Region segmentation** (color grid)
-- **A valid n-Queens solution** (queen board)
-- **Comprehensive metadata** to certify the puzzle's integrity and difficulty level.
+By leveraging **parallel processing**, this system rapidly generates unique maps across different board sizes while ensuring diversity in region layouts. The maps are stored in JSON format, allowing easy reuse and analysis.
 
 ## Features
+- **Randomized N-Queens Placement**: Generates valid N-Queens solutions while enforcing column and diagonal constraints.
+- **Region Segmentation**: Uses an **adaptive flood-fill algorithm** to create distinct regions based on queen placements.
+- **Parallelized Map Generation**: Utilizes **multiprocessing** to generate and validate maps efficiently.
+- **Solvability Evaluation**: Each generated map is assessed for its uniqueness and difficulty using a **constraint solver**.
+- **Duplicate Detection**: Ensures no two maps share the same region segmentation structure.
+- **Configurable Board Sizes**: Supports board sizes from **4×4 to 17×17**, with flexible generation targets.
 
-### 🎲 Randomized n-Queens Solver
-- Utilizes a **randomized backtracking algorithm** to generate valid n-Queens solutions, ensuring diversity in puzzle generation.
+## Implementation Details
+### 1. N-Queens Randomized Backtracking
+- A **randomized backtracking algorithm** places queens on an N×N chessboard.
+- The solution ensures that **no two queens share the same row, column, or diagonal**.
+- The generated queen positions serve as the foundation for defining **color regions** on the board.
 
-### 🎨 Dynamic Region Partitioning
-- Constructs a **colorful segmentation** of the chessboard using a **multi-source flood fill algorithm**.
-- Special regions are seeded by assigning an **entire row and column** based on a queen's position.
-- Other regions are initialized from the remaining queen positions.
+### 2. Region-Based Grid Segmentation
+- The board is divided into distinct **color regions**, with each region expanding outward from queen positions.
+- A **randomly chosen special region** expands fully, while other regions expand probabilistically (0.3–0.5 probability per step).
+- A **multi-source flood-fill algorithm** propagates regions efficiently while maintaining randomness.
+- Any unassigned cells are post-processed to ensure complete coverage.
 
-### 🧠 Difficulty Evaluation
-- A **custom solver** verifies the validity and difficulty of each map.
-- Ensures that each generated map has **at most one solution** (or a limited number within a defined threshold).
+### 3. Map Validation & Filtering
+- Each generated map is evaluated using a **solver** that determines if it has at most **one valid queen placement solution**.
+- Maps exceeding the threshold are discarded to maintain a balance of challenge and uniqueness.
+- The generated maps are checked for duplicates by comparing region layouts.
 
-### 🔍 Uniqueness Guarantee
-- Implements a **uniqueness check** by comparing **color grid distributions** of newly generated maps against existing ones to **prevent duplicates**.
+### 4. Parallelized Generation & Storage
+- The system runs **multiple worker processes** to speed up map generation.
+- Maps are saved in a **structured JSON file** (`generated_maps/maps.json`).
+- Each map is uniquely named and labeled according to its board size.
 
-### ⚡ Multiprocessing Support
-- Uses **Python's multiprocessing** to **generate maps in parallel**, significantly speeding up the process for larger board sizes.
-
-### 📂 Comprehensive JSON Output
-- Saves the final maps in a **JSON file** including:
-  - **Region segmentation** (`colorGrid`)
-  - **n-Queens solution** (`queenBoard`)
-  - **Metadata** (e.g., puzzle name, board size, difficulty level)
-- Allows for further use, analysis, or integration into other applications.
-
----
-
-## 📁 Project Structure
-
-```
-chessboard-map-generator/
-│── generator.py
-│── solver.py
-│── main.py
-└── generated_maps/
-    └── maps.json
-```
-
-### `generator.py`
-Contains core functions for:
-- **Random n-Queens Solution:** `random_n_queens(n)` generates a valid n-Queens configuration.
-- **Region Segmentation:** `generate_regions(n, queen_solution)` partitions the board into regions based on the queen positions.
-- **Chessboard Visualization:** `build_queen_board(n, queen_solution)` creates a human-readable chessboard.
-- **Uniqueness Check:** `are_grids_same(g1, g2)` compares two color grids for identical region distributions.
-
-### `solver.py`
-Implements the solver (`solve`) to rigorously verify:
-- Each **row and column** contains exactly one queen.
-- No two queens are placed in **adjacent diagonal cells**.
-- No **region (or color block) contains more than one queen**.
-
-### `main.py`
-Orchestrates the map generation process by:
-- Determining the **target number** of maps per board size.
-- Utilizing **multiprocessing** to generate maps concurrently.
-- Enforcing both **difficulty and uniqueness criteria**.
-- Saving the resulting maps in a **JSON file** (`generated_maps/maps.json`).
-
----
-
-## 🛠 Requirements
-
-- **Python Version:** 3.6 or higher
-- **Standard Libraries Used:**
-  - `random`
-  - `json`
-  - `multiprocessing`
-  - `os`
-  - `collections`
-- No additional external packages required.
-
----
-
-## 🚀 Installation and Usage
-
-### Clone the Repository:
+## Usage
+### Running the Map Generator
+To generate maps for board sizes 4 to 17, run:
 ```bash
-git clone https://github.com/Tony-XLZ/queens-map-generator.git
+python generate_maps.py
 ```
+This will:
+- Generate and store new maps if the required number is not met.
+- Skip redundant calculations by loading previously saved maps.
+- Utilize **all available CPU cores** to parallelize the generation process.
 
-### Run the Generator:
-```bash
-python main.py
-```
-This command generates maps for board sizes **4 through 17** and saves the JSON output to the `generated_maps/` directory.
-
----
-
-## 📜 Output Details
-
-The **output JSON file** (`maps.json`) contains a dictionary where:
-- **Keys** represent board sizes (e.g., "4", "5", …, "17").
-- **Values** are lists of generated maps.
-
-Each **map dictionary** includes:
-- `name`: A unique identifier (e.g., "Map n8 #3").
-- `caseNumber`: The board size (`n`).
-- `colorGrid`: A **2D list** representing the region segmentation of the board.
-- `queenBoard`: A **visual representation** of the n-Queens solution (`'Q'` for a queen, `'.'` for an empty cell).
-
----
-
-## 📌 Example Output (JSON)
+### JSON Output Format
+Each generated map follows this structure:
 ```json
 {
-  "8": [
-    {
-      "name": "Map n8 #3",
-      "caseNumber": 8,
-      "colorGrid": [
-        [1, 1, 2, 2, 3, 3, 4, 4],
-        [1, 1, 2, 2, 3, 3, 4, 4],
-        ...
-      ],
-      "queenBoard": [
-        [".", ".", ".", "Q", ".", ".", ".", "."],
-        [".", ".", ".", ".", ".", "Q", ".", "."],
-        ...
-      ]
-    }
-  ]
+    "name": "Map n8 #12",
+    "caseNumber": 8,
+    "colorGrid": [[1, 1, 2, ...], [3, 4, 2, ...], ...],
+    "queenBoard": [[".", ".", "Q", ...], [".", "Q", ".", ...], ...]
 }
 ```
+- `name`: Unique identifier for the map.
+- `caseNumber`: Board size (N×N).
+- `colorGrid`: 2D array representing region assignments.
+- `queenBoard`: Human-readable chessboard representation.
+
+### Checking Map Uniqueness
+To verify whether two generated maps share identical region structures, use:
+```python
+from generator import are_grids_same
+same = are_grids_same(grid1, grid2)
+```
+This will return `True` if the maps are structurally identical and `False` otherwise.
+
+## Performance Optimization
+- **Batch Processing**: Generates maps in **batches of at least twice the required amount** to increase valid outputs.
+- **Early Termination (Pruning)**: Stops searching once the required number of valid maps is found.
+- **Cached Computation**: Stores previous queen placements to avoid redundant calculations.
+- **Parallel Processing**: Runs multiple instances of the generator across CPU cores.
+
+## Conclusion
+This project demonstrates a **novel approach to procedural map generation** using **N-Queens constraints and region segmentation**. With **parallel processing and intelligent filtering**, it efficiently produces diverse, solvable, and unique maps suitable for games, AI training, or puzzle design.
+
+### Future Enhancements
+- Support for **custom region growth rules**.
+- **Visualization tools** for generated maps.
+- **Integration with deep learning models** for automated difficulty tuning.
 
 ---
+## 📌 Contributors & License
+- **Author**: [Your Name]
+- **License**: MIT (Feel free to use, modify, and distribute!)
 
-## 🎯 Future Improvements
-- Add a **graphical interface** to visualize the chessboard and color regions interactively.
-- Support **user-defined constraints** (e.g., specific region rules, additional difficulty settings).
-- Optimize **region segmentation algorithms** for better performance and diversity.
-- Extend **export formats** (e.g., CSV, XML, interactive web-based display).
-
----
-
-## 📄 License
-This project is open-source and available under the **MIT License**.
-
----
-
-## 🤝 Contributing
-We welcome contributions! Feel free to open an issue or submit a pull request.
-
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Commit your changes (`git commit -m 'Add new feature'`).
-4. Push to the branch (`git push origin feature-branch`).
-5. Open a Pull Request.
-
-Happy coding! 🎉
