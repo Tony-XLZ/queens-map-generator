@@ -83,8 +83,3 @@ This project demonstrates a **novel approach to procedural map generation** usin
 - **Visualization tools** for generated maps.
 - **Integration with deep learning models** for automated difficulty tuning.
 
----
-## 📌 Contributors & License
-- **Author**: [Your Name]
-- **License**: MIT (Feel free to use, modify, and distribute!)
-
