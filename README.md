@@ -40,7 +40,7 @@ Because the number of valid queen placements grows combinatorially with n, espec
 Install the Python dependencies with pip:
 
 ```bash
-pip install numpy cython
+pip install numpy cython setuptools
 ```
 
 ## Building the Cython Module

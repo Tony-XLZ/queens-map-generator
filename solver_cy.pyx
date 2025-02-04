@@ -4,32 +4,42 @@ import numpy as np
 cimport numpy as np
 from libc.stdint cimport uint32_t
 
-# 通过 cimport 引入 NumPy 的 C API 初始化函数
+# Import NumPy C API initialization function via cimport.
 cdef extern from "numpy/arrayobject.h":
     void import_array()
 
-# 调用 import_array() 初始化 NumPy C API
-# 注意：此调用必须在模块加载时执行一次
+# Initialize the NumPy C API (must be called once during module load).
 import_array()
 
-# 这里直接将 DTYPE_t 定义为 C 的 int 类型（通常与 np.intc 对应）
+# Define the element type for the grid.
 ctypedef int DTYPE_t
 
-# 定义一个内联的绝对值函数，确保它在 nogil 下也能调用
+# Inline absolute value function that can be used in nogil contexts.
 cdef inline int ABS(int x) nogil:
     return x if x >= 0 else -x
 
+###############################################################################
+# Recursive Backtracking Function
+###############################################################################
 #
-# _backtrack 函数：递归计数满足约束的皇后摆法
+# _backtrack:
+#   Recursively counts the number of valid queen placements on an n×n board
+#   under the following constraints:
+#       1. Exactly one queen per row and column.
+#       2. Queens in consecutive rows must not be placed in adjacent columns.
+#       3. At most one queen per designated region (block) of the grid.
 #
-# 参数说明：
-#   row        : 当前处理的行号
-#   n          : 棋盘尺寸
-#   used_cols  : 用各个位记录哪些列已使用（每一行放一个皇后）
-#   last_col   : 上一行皇后所在列（用于判断相邻行皇后不能在相邻列）
-#   grid_arr   : 区域网格的内存视图（二维，尺寸 n×n），每个元素类型为 DTYPE_t
-#   threshold  : 剪枝阈值，累计解数超过此值时提前返回
-#   used_blocks: 长度足够的 C 数组，记录每个区域（块）是否已使用
+# Parameters:
+#   row         - The current row to process.
+#   n           - The board size.
+#   used_cols   - Bitmask representing which columns are occupied.
+#   last_col    - Column index of the queen in the previous row (used for adjacency check).
+#   grid_arr    - Memory view of the 2D grid (n×n) holding region identifiers.
+#   threshold   - Pruning threshold; recursion returns early if count exceeds this value.
+#   used_blocks - C array (of boolean values) indicating whether a region (block) is already used.
+#
+# Returns:
+#   The count of valid queen placements found in the current recursive branch.
 #
 cdef int _backtrack(int row, int n, uint32_t used_cols, int last_col,
                     DTYPE_t[:, :] grid_arr, int threshold,
@@ -37,78 +47,99 @@ cdef int _backtrack(int row, int n, uint32_t used_cols, int last_col,
     cdef int count = 0
     cdef int col, block_id, cnt
 
+    # Base case: if all rows have been processed, a valid solution is found.
     if row == n:
-        return 1  # 找到一个完整解
+        return 1
 
+    # Iterate over all columns in the current row.
     for col in range(n):
-        # 检查当前列是否已使用（利用位运算）
+        # Skip if the column is already occupied.
         if used_cols & (1 << col):
             continue
-        # 如果不是第一行，则判断当前列与上一行皇后是否相邻
+        # For non-first rows, ensure that the queen is not placed in an adjacent column.
         if row > 0 and ABS(last_col - col) <= 1:
             continue
-        # 取当前单元格所属的区域编号
+        # Retrieve the region (block) identifier for the current cell.
         block_id = grid_arr[row, col]
-        # 如果该区域已使用，则跳过
+        # Skip if the region has already been used.
         if used_blocks[block_id]:
             continue
 
-        # 标记该区域已使用
+        # Mark the region as used.
         used_blocks[block_id] = True
 
-        # 递归进入下一行，更新 used_cols 与剩余阈值
+        # Recurse to the next row, updating the column bitmask and passing the current column.
         cnt = _backtrack(row + 1, n, used_cols | (1 << col), col,
                          grid_arr, threshold - count, used_blocks)
         count += cnt
 
-        # 回溯时撤销该区域标记
+        # Backtrack: unmark the region.
         used_blocks[block_id] = False
 
-        # 如果累计解数超过阈值，则提前返回
+        # If the cumulative count exceeds the threshold, prune further exploration.
         if count > threshold:
             return count
 
     return count
 
+###############################################################################
+# Public API Function: count_valid_solutions
+###############################################################################
+#
+# count_valid_solutions:
+#   Counts the number of valid queen placements on the board defined by the given
+#   region grid. Applies early pruning if the solution count exceeds the provided
+#   threshold.
+#
+# Parameters:
+#   color_grid - A 2D list where each element (of type int) represents a region ID.
+#   threshold  - The maximum count to search for; recursion stops early if exceeded.
+#
+# Returns:
+#   The total count of valid queen placements (may exceed threshold).
+#
 def count_valid_solutions(object color_grid, int threshold):
-    """
-    使用 Cython 实现的计数函数，计算给定区域网格下满足下列约束的皇后摆法数：
-      1. 每行每列恰好一个皇后；
-      2. 相邻行的皇后所在列相差大于 1；
-      3. 同一区域内最多放置一个皇后。
-    当累计解数超过 threshold 时提前返回（剪枝）。
-
-    参数：
-       color_grid: 二维列表（每个元素为 int），表示区域编号
-       threshold : 剪枝阈值
-
-    返回：
-       满足条件的解数（可能超过 threshold）
-    """
+    # Determine board size (number of rows).
     cdef int n = len(color_grid)
-    # 将 color_grid 转为 numpy 数组，再转换为内存视图（要求数据连续）
+    # Convert the Python grid to a contiguous NumPy array with C integer type.
     cdef np.ndarray[DTYPE_t, ndim=2] arr = np.array(color_grid, dtype=np.intc)
     cdef DTYPE_t[:, :] grid_arr = arr
 
     cdef int i
-    # 假设区域编号均在 0 ~ n-1 内，这里分配长度为 128 的 used_blocks 数组（n 较大时可调整）
+    # Allocate a fixed-size array for region usage tracking.
+    # Adjust size if n (or region ID range) is larger than 128.
     cdef bint used_blocks[128]
     for i in range(128):
         used_blocks[i] = False
 
     cdef int result
-    # 在递归中释放 GIL，以获得更高的执行效率
+    # Execute recursion without the Global Interpreter Lock (GIL) for performance.
     with nogil:
         result = _backtrack(0, n, 0, -100, grid_arr, threshold, used_blocks)
     return result
 
+###############################################################################
+# Public API Function: solve
+###############################################################################
+#
+# solve:
+#   Evaluates the board (or map) difficulty by determining whether any valid
+#   queen placement exists under the constraints. It returns a dictionary with
+#   a similar format to the original solver.
+#
+# Parameters:
+#   color_grid - A 2D list of integers representing region IDs.
+#   name       - Identifier for the current board/map.
+#   threshold  - (Optional) Pruning threshold (default is 1).
+#
+# Returns:
+#   A dictionary containing:
+#       - "name": The board/map name.
+#       - "solvable": A boolean indicating if at least one valid solution exists.
+#       - "number_solution": The total count of valid solutions.
+#       - "number_possibility": Always None (for compatibility with original format).
+#
 def solve(object color_grid, object name, int threshold=1):
-    """
-    Cython 版本的求解函数，用于评估地图难度。调用 count_valid_solutions，
-    如果方案数不超过阈值，则认为地图难度较高。
-
-    返回字典格式与原版一致。
-    """
     cdef int count = count_valid_solutions(color_grid, threshold)
     return {"name": name,
             "solvable": count > 0,
