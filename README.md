@@ -111,4 +111,27 @@ The entry point for the project is `main.py`, which orchestrates map generation,
 python main.py
 ```
 
-Generated maps are stored in the `generated_maps` directory in JSON format. The console output provides real-time logs of the generation process and timing information.
+Generated maps are stored in the `generated_maps` directory in JSON format, specifically in maps.json. Each map entry contains:
+
+name: The unique name of the generated map.
+
+caseNumber: The board size (e.g., 4 for a 4x4 grid).
+
+colorGrid: A 2D array representing the assigned regions.
+
+queenBoard: A 2D array showing the placement of queens.
+
+Example JSON structure:
+
+```bash
+{
+    "4": [
+        {
+            "name": "Map n4 #1",
+            "caseNumber": 4,
+            "colorGrid": [[1,0,0,0],[1,1,1,1],[1,1,3,3],[1,2,3,3]],
+            "queenBoard": [[".",".","Q","."],["Q",".",".","."],[".",".",".","Q"],[".","Q",".","."]]
+        }
+    ]
+}
+```
