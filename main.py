@@ -1,8 +1,10 @@
 import json
 import multiprocessing
 import os
-from generator import generate_map, are_grids_same
+from generator_cy import generate_map, are_grids_same
 from solver_cy import solve
+
+import time
 
 
 def target_map_count(n):
@@ -61,6 +63,7 @@ def worker_generate_map(n):
 
 
 if __name__ == '__main__':
+    time_start = time.time()
     # Create the output directory if it doesn't exist.
     output_dir = "generated_maps"
     os.makedirs(output_dir, exist_ok=True)
@@ -74,7 +77,7 @@ if __name__ == '__main__':
         data = {}
 
     # Ensure that each board size (from 4 to 17) has its own list for storing maps.
-    for n in range(4, 18):
+    for n in range(4, 12):
         key = str(n)
         if key not in data:
             data[key] = []
@@ -84,7 +87,7 @@ if __name__ == '__main__':
 
     try:
         # Process board sizes from 4 to 17.
-        for n in range(4, 18):
+        for n in range(4, 12):
             key = str(n)
             target = target_map_count(n)
             current_maps = data[key]
@@ -120,6 +123,8 @@ if __name__ == '__main__':
         with open(file_name, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
         print("All maps have been generated and saved!")
+        time_end = time.time()
+        print('time cost', time_end - time_start, 's')
     finally:
         # Properly close and join the multiprocessing pool.
         pool.close()
