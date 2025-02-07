@@ -77,7 +77,7 @@ if __name__ == '__main__':
         data = {}
 
     # Ensure that each board size (from 4 to 17) has its own list for storing maps.
-    for n in range(4, 12):
+    for n in range(4, 14):
         key = str(n)
         if key not in data:
             data[key] = []
@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
     try:
         # Process board sizes from 4 to 17.
-        for n in range(4, 12):
+        for n in range(4, 14):
             key = str(n)
             target = target_map_count(n)
             current_maps = data[key]
@@ -124,7 +124,25 @@ if __name__ == '__main__':
             json.dump(data, f, indent=4, ensure_ascii=False)
         print("All maps have been generated and saved!")
         time_end = time.time()
-        print('time cost', time_end - time_start, 's')
+
+        # Calculate the elapsed time in seconds
+        elapsed = time_end - time_start
+
+        # If elapsed time is one hour or more, print in "x h y min z s" format.
+        if elapsed >= 3600:
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = elapsed % 60
+            print(f"time cost: {hours} h {minutes} min {seconds:.2f} s")
+        # If elapsed time is at least one minute but less than an hour, print in "y min z s" format.
+        elif elapsed >= 60:
+            minutes = int(elapsed // 60)
+            seconds = elapsed % 60
+            print(f"time cost: {minutes} min {seconds:.2f} s")
+        # Otherwise, print the seconds only.
+        else:
+            print(f"time cost: {elapsed:.2f} s")
+
     finally:
         # Properly close and join the multiprocessing pool.
         pool.close()
