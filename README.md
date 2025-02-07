@@ -9,8 +9,7 @@ queens-map-generator/
 ├── generator_cy.pyx        # Cython module for generating maps using n-Queens and flood fill algorithms
 ├── solver_cy.pyx           # Cython module for validating maps via optimized backtracking
 ├── main.py                 # Main script for parallel map generation and validation
-├── setup.py                # Build script for Cython extensions
-└── README.md               # This documentation file
+└── setup.py                # Build script for Cython extensions
 ```
 
 
