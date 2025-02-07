@@ -2,90 +2,113 @@
 
 Welcome to the **Queens Map Generation** project! This project generates challenging chessboard puzzles based on the n-Queens problem combined with region (color block) constraints. It utilizes advanced Python techniques along with Cython acceleration to efficiently evaluate puzzle difficulty—even for larger board sizes (n > 11).
 
-## Overview
-
-The traditional n-Queens problem asks for placements of n queens on an n×n chessboard so that no two queens attack each other. In our extended version, additional constraints are introduced:
-
-1. **Non-Adjacent Queens Constraint:** In consecutive rows, queens must not be placed in adjacent columns.
-2. **Region (Color Block) Constraint:** The chessboard is divided into colored regions, and each region may contain at most one queen.
-
-Because the number of valid queen placements grows combinatorially with n, especially when considering extra constraints, our project adopts a two-pronged approach for performance:
-- **Python-Level Optimizations:** Using recursion with early-pruning and bit-level operations.
-- **Cython Acceleration:** Rewriting the core backtracking solver in Cython (with released GIL and memory views) to achieve C-level speed.
-
 ## Project Structure
 
-- **`main.py`**  
-  The entry point of the application. It coordinates map generation, uniqueness checks, and calls the solver to evaluate each map's difficulty.
-
-- **`generator.py`**  
-  Contains functions to generate random n-Queens solutions and to partition the board into regions (color grids). The region generation uses a multi-source flood fill strategy with randomized probabilities.
-
-- **`solver.py`**  
-  The pure-Python solver implementation that evaluates board configurations by enumerating valid queen placements under the imposed constraints.
-
-- **`solver_cy.pyx`**  
-  A Cython implementation of the core recursive solver. This module uses static typing, memory views, and GIL-free recursion to greatly improve performance for larger board sizes.
-
-- **`setup.py`**  
-  The build script for compiling the Cython module. It uses `cythonize` along with NumPy’s header files to correctly compile the extension module.
-
-## Requirements
-
-- **Python 3.x** (tested with Python 3.13)
-- **NumPy**
-- **Cython**
-- A C/C++ compiler (compatible with your platform)
-
-Install the Python dependencies with pip:
-
 ```bash
-pip install numpy cython setuptools
+queens-map-generator/
+├── generator_cy.pyx        # Cython module for generating maps using n-Queens and flood fill algorithms
+├── solver_cy.pyx           # Cython module for validating maps via optimized backtracking
+├── main.py                 # Main script for parallel map generation and validation
+├── setup.py                # Build script for Cython extensions
+└── README.md               # This documentation file
 ```
 
-## Building the Cython Module
 
-Before running `main.py`, you need to build the Cython extension:
+## Overview
+
+MapGen uses a multi-stage process to generate complex map layouts:
+
+1. **n-Queens Seed Generation**  
+   A randomized backtracking algorithm produces a valid n-Queens solution, where each queen's position acts as a seed for a distinct region.
+
+2. **Region Partitioning via Flood Fill**  
+   Using a multi-source flood fill algorithm with randomized expansion probabilities, each queen-seeded region expands until the grid is completely partitioned. Post-processing ensures that no cell is left unassigned.
+
+3. **Rigorous Map Validation**  
+   - **Connectivity Check**: Each region is verified for connectivity using a breadth-first search (BFS) algorithm.  
+   - **Unique Solution Validation**: An optimized backtracking solver (implemented in Cython) counts valid queen placements under additional constraints. Only maps with a challenging solution space (at most one valid solution) are accepted.
+
+4. **Parallel Generation**  
+   MapGen harnesses Python’s multiprocessing to concurrently generate and validate maps across different board sizes, ensuring efficiency even at scale.
+
+
+
+## Features
+
+- **Randomized n-Queens Solver**  
+  Generates diverse n-Queens solutions using a randomized backtracking approach, ensuring varied starting points for map generation.
+
+- **Dynamic Region Partitioning**  
+  Converts n-Queens solutions into region-partitioned grids through a probabilistic multi-source flood fill, creating natural and unpredictable region shapes.
+
+- **Efficient Connectivity Verification**  
+  Employs BFS to guarantee that every region is connected, a key requirement for map validity.
+
+- **Optimized Backtracking Solver**  
+  Counts valid queen placements under strict constraints using a highly optimized Cython implementation that leverages NumPy for speed and memory efficiency.
+
+- **Parallel Map Generation**  
+  Utilizes multiprocessing to generate maps in batches, dramatically reducing overall computation time.
+
+- **Unique Map Validation**  
+  Ensures that each generated map is distinct by comparing region layouts, maintaining a high standard of variety and challenge.
+
+
+
+## How It Works
+
+### 1. Seed Generation with n-Queens
+
+- **Randomized Backtracking**  
+  The project begins by solving the n-Queens problem using a randomized backtracking algorithm. This approach not only guarantees a valid configuration (one queen per row, with no conflicts) but also introduces randomness to enhance map diversity.
+
+### 2. Region Partitioning via Flood Fill
+
+- **Multi-Source Flood Fill**  
+  Each queen’s position acts as a seed for a region. Regions expand using a probabilistic flood fill with expansion probabilities between 0.3 and 0.5. This results in organic and varied region boundaries.
+
+- **Post-Processing**  
+  Cells left unassigned after the initial flood fill are filled by considering adjacent regions, ensuring complete coverage of the grid.
+
+### 3. Map Validation
+
+- **Connectivity Check**  
+  A BFS algorithm inspects each region to ensure it forms a single connected component.
+
+- **Backtracking Solver with Early Pruning**  
+  An optimized solver, implemented in Cython, evaluates whether the map meets the required challenge criteria. It uses bitmasking and early pruning to efficiently count valid queen placements under constraints (e.g., queens in consecutive rows must not be in adjacent columns, and only one queen per region).
+
+### 4. Parallel Execution
+
+- **Multiprocessing**  
+  The main script uses Python’s multiprocessing capabilities to generate maps concurrently across multiple board sizes, ensuring efficient use of system resources.
+
+
+
+## Installation
+
+Before building MapGen, ensure you have Python 3, a C compiler, and the required libraries installed. Then, install the dependencies:
 
 ```bash
+pip install cython numpy
+```
+
+Clone the repository and build the Cython extensions:
+
+```bash
+git clone https://github.com/Tony-XLZ/queens-map-generator.git
+cd queens-map-generator
 python setup.py build_ext --inplace
 ```
 
-This command compiles `solver_cy.pyx` into a binary extension module (e.g., `solver_cy.so` on Linux/macOS or `solver_cy.pyd` on Windows) that is automatically imported by `main.py`.
+
 
 ## Usage
 
-After building the Cython module, you can run the main script:
+The entry point for the project is `main.py`, which orchestrates map generation, validation, and saving the output as a JSON file. To run the project:
 
 ```bash
 python main.py
 ```
 
-`main.py` will generate maps for chessboard sizes ranging from **4 to 17**. Each generated map includes:
-
-- A **color grid** (region segmentation)
-- A **visual chessboard** with queen placements
-- An **evaluation report** that checks if the puzzle has a unique solution (or meets the difficulty threshold)
-
-The generated maps are stored in a JSON file (`generated_maps/maps.json`).
-
-## Scientific & Technical Insights
-
-### Optimization Philosophy:
-Rather than enumerating all possible valid configurations in pure Python, we directly count valid solutions using **bitwise operations and recursive backtracking**. Once the count exceeds a set threshold, the recursion prunes further search, saving computational time.
-
-### Cython Acceleration:
-The Cython module leverages:
-
-- **Static Type Declarations:** Allowing the C compiler to optimize arithmetic and logical operations.
-- **Memory Views:** To efficiently access NumPy arrays in a GIL-free context.
-- **GIL Release:** Permitting the heavy recursive computation to run at near C-speed.
-
-### Scalability:
-These improvements are critical for handling **board sizes greater than 10**, where the search space can become enormous. Our design ensures that even with the combinatorial explosion, only the necessary computations are performed.
-
-## Future Enhancements
-
-- Support for **custom region growth rules**.
-- **Visualization tools** for generated maps.
-- **Integration with deep learning models** for automated difficulty tuning.
+Generated maps are stored in the `generated_maps` directory in JSON format. The console output provides real-time logs of the generation process and timing information.
